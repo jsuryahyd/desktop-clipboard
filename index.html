@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Clipboard</title>
+
+    <style>
+      body {
+        height: calc(100vh - 16px);
+        width: 100%;
+        margin: 0;
+        padding: 0;
+				font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        background-color: #232b2b;
+        color: white;
+      }
+			#clipboard-list{
+				padding-left: 0;
+        padding:15px;
+				list-style-type: none;
+			}
+      .clipboard-item {
+        display: block;
+				border:1px solid #e3e3e3;
+				border-radius:6px;
+				padding:10px;
+				margin-bottom: 10px;
+        position: relative;
+      }
+      .clipboard-item::after {
+        content: "";
+        clear: both;
+        display: table;
+      }
+      .clipboard-item-overlay{
+        position: absolute;
+        width:100%;
+        height:100%;
+        left: 0;
+        top:0;
+
+      }
+      /*
+ #414a4c(65,74,76)
+      #3b444b
+      #353839
+      #0e1111
+      */
+    </style>
+  </head>
+  <body>
+    <pre></pre>
+
+    <ul id="clipboard-list"></ul>
+  </body>
+
+  <script>
+    console.log(process.versions);
+    const { clipboard,ipcRenderer, } = require("electron");
+    var gkm = require("gkm");
+    // Listen to all events
+    // gkm.events.onAny(function(data) {
+    // 	console.log(this.event + ' ' + data);
+    // });
+    let pressed = [];
+    // Listen to all key events (pressed, released, typed)
+    gkm.events.on("key.*", function (data) {
+      const _data = this.event + " " + data[0];
+      // console.log(_data);
+      if (this.event.includes("pressed")) {
+        pressed.push(data[0]);
+        // console.log({ pressed, data, that: this, list });
+        onCopied({pressed,data})
+
+
+
+
+      } else if (this.event.includes("released")) {
+        pressed = pressed.filter((d) => d != data[0]);
+      }
+    });
+
+    // Listen to all mouse events (click, pressed, released, moved, dragged)
+    // gkm.events.on('mouse.*', function(data) {
+    // 	console.log(this.event + ' ' + data);
+    // });
+    /**
+     * type {content:string,type:'plainText'|'richText'|'buffer'}
+     *
+     * */
+    let list = [];
+
+    function showClipboard() {
+      const listContainer = document.getElementById("clipboard-list");
+      listContainer.innerHTML = "";
+      list.forEach((l) => {
+        const el = document.createElement("li");
+        el.classList.add("clipboard-item");
+        el.addEventListener('click',()=>{
+          // ipcRenderer.send('hide');
+          ipcRenderer.send('paste',{content:l.content})
+        })
+        if (l.contentType == "html") {
+          el.innerHTML = l.content;
+        } else {
+          el.textContent = l.content;
+        }
+        const overlay = document.createElement('div');
+        overlay.classList.add('clipboard-item-overlay');
+
+        el.appendChild(overlay)
+        listContainer.appendChild(el);
+      });
+      console.log({ list });
+    }
+
+    function copyFromClipboard() {
+      const rtf = clipboard.readRTF();
+      const text = clipboard.readText();
+      const html = text;
+      // const html = clipboard.readHTML();
+      const bookmark = clipboard.readBookmark();
+      console.log({ rtf, text, html, bookmark });
+
+      if (rtf) {
+        if (list.find((l) => l.contentType == "rtf" && l.content == rtf)) {
+          return console.log("already present");
+        }
+        list.push({ content: rtf, id: getUniqueNumber(), contentType: "rtf" });
+      } else if (bookmark && bookmark.title) {
+        if (
+          list.find(
+            (l) =>
+              l.contentType == "bookmark" &&
+              l.content.url == bookmark.url &&
+              l.content.title == bookmark.title
+          )
+        ) {
+          return console.log("already present");
+        }
+        list.push({
+          content: { ...bookmark },
+          id: getUniqueNumber(),
+          contentType: "bookmark",
+        });
+      } else if (html) {
+        if (list.find((l) => l.contentType == "html" && l.content == html)) {
+          return console.log("already present");
+        }
+        list.push({
+          content: html,
+          id: getUniqueNumber(),
+          contentType: "html",
+        });
+      } else if (text) {
+        if (list.find((l) => l.contentType == "text" && l.content == text)) {
+          return console.log("already present");
+        }
+        list.push({
+          content: text,
+          id: getUniqueNumber(),
+          contentType: "text",
+        });
+      }
+      showClipboard();
+      ipcRenderer.send('copied',{ content: text, id: getUniqueNumber(), contentType: "rtf" })
+    }
+
+    function getUniqueNumber() {
+      window.__UNIQUE_NUMBER__ = (window.__UNIQUE_NUMBER__ || 0) + 1;
+      return window.__UNIQUE_NUMBER__;
+    }
+
+    function onCopied({pressed,data}){
+      if (
+          data[0]?.toLowerCase() == "c" &&
+          (pressed.includes("Left Control") ||
+            pressed.includes("Right Control"))
+        ) {
+          console.log(clipboard.readText());
+          setTimeout(() => {
+            copyFromClipboard();
+          }, 300);
+        }
+    }
+
+    ipcRenderer.on('initialList',(e,arr)=>{
+      console.log('-------------------------',arr)
+      list=arr||[];
+      showClipboard();
+    })
+  </script>
+</html>
