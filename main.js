@@ -1,11 +1,13 @@
 const AutoLaunch = require('auto-launch');
-const {app,BrowserWindow, Tray, Menu,ipcRenderer,globalShortcut} = require('electron');
+const {app,BrowserWindow, Tray, Menu,ipcRenderer,globalShortcut,screen,dialog} = require('electron');
 const { ipcMain } = require('electron/main');
 const fs = require('fs');
+const path = require('path');
 // const robot = require('robotjs');
 var ks = require('node-key-sender');
 const keySender = require('node-key-sender');
-ks.sendKey('a');
+const SnipWindow = require('./js/SnipScreen')
+// ks.sendKey('a');
 
 //start on system startup
 const autoLaunch = new AutoLaunch({name:"Clipboard"});
@@ -32,7 +34,7 @@ app.on('before-quit', function () {
 	globalShortcut.unregisterAll();
 	fs.writeFileSync('./db/database.json',JSON.stringify(list));
 });
-let appWindow;
+let appWindow,snipWindow;
 function CreateWindow(){
 	appWindow = new BrowserWindow({
 		width:1280,
@@ -55,11 +57,13 @@ function CreateWindow(){
 	appWindow.on('blur', () => appWindow.hide());//gives focus back to previous window/application
 
 	const w = fs.readFileSync('./db/database.json','utf-8');
-	console.log(w);
+	// console.log(w);
 	list = JSON.parse(w);
 	appWindow.webContents.on('did-finish-load', () => {
 		appWindow.webContents.send('initialList',list)
-  })
+	})
+	
+	snipWindow = SnipWindow({mainWindow:appWindow});
 }
 let tray;
 app.whenReady().then(()=>{
@@ -76,7 +80,8 @@ app.whenReady().then(()=>{
 		{label:"Quit",click:()=>{isQuiting=true;appWindow.destroy();app.quit();}},
 	])
 	tray.setToolTip("Clipboard")	
-	tray.setContextMenu(trayContextMenu)
+	tray.setContextMenu(trayContextMenu);
+	console.log(screen);
 });
 
 
@@ -109,6 +114,11 @@ ipcMain.on('paste',(e,{content})=>{
 
 ipcMain.on('copied',(e,d)=>{
 	list.push(d);
+	
+})
+
+ipcMain.on('take-screenshot',()=>{
+	snipWindow.init();
 })
 
 // function onCopied(appWindow){
@@ -116,3 +126,53 @@ ipcMain.on('copied',(e,d)=>{
 // 	appWindow.webContents.send('item-added',)
 // }
 
+function takeScreenShot(){
+	appWindow.capturePage({ 
+		x: 0, 
+		y: 0, 
+		width: 800, 
+		height: 600, 
+}).then((img) => { 
+	dialog 
+			.showSaveDialog({ 
+					title: "Select the File Path to save", 
+			
+					// Default path to assets folder 
+					defaultPath: path.join(__dirname,  
+																 "../aassets/image.png"), 
+			
+					// defaultPath: path.join(__dirname,  
+					// '../assets/image.jpeg'), 
+					buttonLabel: "Save", 
+			
+					// Restricting the user to only Image Files. 
+					filters: [ 
+							{ 
+									name: "Image Files", 
+									extensions: ["png", "jpeg", "jpg"], 
+							}, 
+					], 
+					properties: [], 
+			}) 
+			.then((file) => { 
+					// Stating whether dialog operation was  
+					// cancelled or not. 
+					console.log(file.canceled); 
+					if (!file.canceled) { 
+							console.log(file.filePath.toString()); 
+
+							// Creating and Writing to the image.png file 
+							// Can save the File as a jpeg file as well, 
+							// by simply using img.toJPEG(100); 
+							fs.writeFile(file.filePath.toString(),  
+													 img.toPNG(), "base64", function (err) { 
+									if (err) throw err; 
+									console.log("Saved!"); 
+							}); 
+					} 
+			}) 
+			.catch((err) => { 
+					console.log(err); 
+			}); 
+		});
+}
